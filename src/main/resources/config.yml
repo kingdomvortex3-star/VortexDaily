@@ -6,24 +6,40 @@ settings:
   streak-enabled: true
   streak-reset: true
   gui-title: "&8Daily Rewards"
-  auto-open: false
+
+discord-webhook:
+  enabled: true
+
+  url: ""
+
+  username: "VortexDaily"
+  avatar-url: ""
+
+  embed:
+    color: 5793266
+    footer: "VortexDaily • Automatic Notification"
+
+  events:
+    daily-claim: true
+    weekly-bonus: true
+    streak-reset: true
 
 messages:
   no-permission: "&cKamu tidak memiliki permission!"
   already-claimed: "&cKamu sudah mengambil hadiah hari ini!"
   claimed: "&aBerhasil mengambil hadiah Day %day%!"
-  streak-reset: "&cStreak kamu terputus! Dimulai kembali dari Day 1."
   streak-info: "&bStreak kamu: &f%streak% hari"
   reload: "&aConfig VortexDaily berhasil dimuat ulang!"
-  player-not-found: "&cPemain tidak ditemukan."
-  reset: "&aData Daily %player% berhasil direset."
+  reset: "&aData Daily %player% berhasil direset!"
 
 gui:
   rows: 6
+
   filler:
     enabled: true
     material: BLACK_STAINED_GLASS_PANE
     name: " "
+
   claim:
     slot: 49
     material: CHEST
@@ -33,6 +49,7 @@ gui:
       - ""
       - "&eHari berikutnya: &fDay %day%"
       - "&eStreak: &f%streak% hari"
+
   streak:
     slot: 4
     material: FIREWORK_STAR
@@ -40,166 +57,162 @@ gui:
     lore:
       - "&7Streak saat ini: &f%streak% hari"
       - "&7Berikutnya: &eDay %day%"
+
   claimed:
     material: LIME_STAINED_GLASS_PANE
     name: "&a&lDAY %day% &8- &aCLAIMED"
     lore:
       - "&7Hadiah sudah diambil."
+
   available:
     material: CHEST
     name: "&e&lDAY %day% &8- &eAVAILABLE"
     lore:
       - "&7Hadiah tersedia."
       - "&eKlik CLAIM untuk mengambil."
+
   locked:
     material: GRAY_STAINED_GLASS_PANE
     name: "&c&lDAY %day% &8- &cLOCKED"
     lore:
       - "&7Selesaikan hari sebelumnya."
-  weekly:
-    material: ENDER_CHEST
-    name: "&6&lWEEKLY BONUS"
-    lore:
-      - "&7Bonus setiap 7 hari berturut-turut."
-      - "&eDay %day%"
 
 daily-rewards:
   "1":
-    rewards:
-      - "money:1000"
-      - "item:DIAMOND:2"
+    commands:
+      - "eco give %player% 150"
+      - "give %player% bread 16"
   "2":
-    rewards:
-      - "money:2000"
-      - "item:IRON_INGOT:16"
+    commands:
+      - "eco give %player% 200"
+      - "give %player% cooked_beef 16"
   "3":
-    rewards:
-      - "money:3000"
-      - "item:DIAMOND:3"
+    commands:
+      - "eco give %player% 250"
+      - "give %player% golden_carrot 8"
   "4":
-    rewards:
-      - "money:4000"
-      - "item:GOLD_INGOT:16"
+    commands:
+      - "eco give %player% 300"
+      - "give %player% bread 24"
   "5":
-    rewards:
-      - "money:5000"
-      - "item:EMERALD:5"
+    commands:
+      - "eco give %player% 350"
+      - "give %player% cooked_chicken 24"
   "6":
-    rewards:
-      - "money:6000"
-      - "item:EXPERIENCE_BOTTLE:16"
+    commands:
+      - "eco give %player% 400"
+      - "give %player% golden_carrot 16"
   "7":
-    rewards:
-      - "money:7000"
-      - "item:DIAMOND:5"
+    commands:
+      - "eco give %player% 500"
+      - "give %player% cooked_beef 32"
   "8":
-    rewards:
-      - "money:8000"
-      - "item:IRON_BLOCK:5"
+    commands:
+      - "eco give %player% 550"
+      - "give %player% bread 32"
   "9":
-    rewards:
-      - "money:9000"
-      - "item:EMERALD:8"
+    commands:
+      - "eco give %player% 600"
+      - "give %player% cooked_beef 24"
   "10":
-    rewards:
-      - "money:10000"
-      - "item:DIAMOND:8"
+    commands:
+      - "eco give %player% 650"
+      - "give %player% golden_carrot 16"
   "11":
-    rewards:
-      - "money:11000"
-      - "item:GOLD_BLOCK:5"
+    commands:
+      - "eco give %player% 700"
+      - "give %player% cooked_chicken 32"
   "12":
-    rewards:
-      - "money:12000"
-      - "item:EXPERIENCE_BOTTLE:32"
+    commands:
+      - "eco give %player% 750"
+      - "give %player% golden_carrot 24"
   "13":
-    rewards:
-      - "money:13000"
-      - "item:DIAMOND:10"
+    commands:
+      - "eco give %player% 800"
+      - "give %player% cooked_beef 32"
   "14":
-    rewards:
-      - "money:14000"
-      - "item:EMERALD_BLOCK:3"
+    commands:
+      - "eco give %player% 1000"
+      - "give %player% golden_carrot 32"
   "15":
-    rewards:
-      - "money:15000"
-      - "item:DIAMOND_BLOCK:1"
+    commands:
+      - "eco give %player% 1100"
+      - "give %player% bread 32"
   "16":
-    rewards:
-      - "money:16000"
-      - "item:IRON_BLOCK:16"
+    commands:
+      - "eco give %player% 1200"
+      - "give %player% cooked_beef 32"
   "17":
-    rewards:
-      - "money:17000"
-      - "item:DIAMOND:16"
+    commands:
+      - "eco give %player% 1300"
+      - "give %player% golden_carrot 24"
   "18":
-    rewards:
-      - "money:18000"
-      - "item:GOLD_BLOCK:10"
+    commands:
+      - "eco give %player% 1400"
+      - "give %player% cooked_chicken 32"
   "19":
-    rewards:
-      - "money:19000"
-      - "item:EMERALD_BLOCK:5"
+    commands:
+      - "eco give %player% 1500"
+      - "give %player% golden_carrot 32"
   "20":
-    rewards:
-      - "money:20000"
-      - "item:DIAMOND_BLOCK:2"
+    commands:
+      - "eco give %player% 1600"
+      - "give %player% cooked_beef 48"
   "21":
-    rewards:
-      - "money:21000"
-      - "item:NETHERITE_INGOT:1"
+    commands:
+      - "eco give %player% 1800"
+      - "give %player% golden_carrot 48"
   "22":
-    rewards:
-      - "money:22000"
-      - "item:DIAMOND:24"
+    commands:
+      - "eco give %player% 1900"
+      - "give %player% bread 48"
   "23":
-    rewards:
-      - "money:23000"
-      - "item:EMERALD_BLOCK:8"
+    commands:
+      - "eco give %player% 2000"
+      - "give %player% cooked_beef 48"
   "24":
-    rewards:
-      - "money:24000"
-      - "item:GOLD_BLOCK:16"
+    commands:
+      - "eco give %player% 2200"
+      - "give %player% golden_carrot 48"
   "25":
-    rewards:
-      - "money:25000"
-      - "item:DIAMOND_BLOCK:3"
+    commands:
+      - "eco give %player% 2400"
+      - "give %player% cooked_chicken 48"
   "26":
-    rewards:
-      - "money:26000"
-      - "item:NETHERITE_SCRAP:8"
+    commands:
+      - "eco give %player% 2600"
+      - "give %player% golden_carrot 48"
   "27":
-    rewards:
-      - "money:27000"
-      - "item:NETHERITE_INGOT:2"
+    commands:
+      - "eco give %player% 2800"
+      - "give %player% cooked_beef 64"
   "28":
-    rewards:
-      - "money:28000"
-      - "item:DIAMOND_BLOCK:5"
+    commands:
+      - "eco give %player% 3000"
+      - "give %player% golden_carrot 64"
   "29":
-    rewards:
-      - "money:29000"
-      - "item:NETHERITE_INGOT:3"
+    commands:
+      - "eco give %player% 3500"
+      - "give %player% cooked_beef 64"
   "30":
-    rewards:
-      - "money:50000"
-      - "item:NETHERITE_BLOCK:1"
+    commands:
+      - "eco give %player% 5000"
+      - "give %player% golden_apple 16"
 
 weekly-rewards:
   "7":
-    rewards:
-      - "money:25000"
-      - "item:DIAMOND:16"
-      - "command:give %player% golden_apple 8"
+    commands:
+      - "eco give %player% 1500"
+      - "give %player% golden_apple 4"
   "14":
-    rewards:
-      - "money:50000"
-      - "item:DIAMOND_BLOCK:3"
+    commands:
+      - "eco give %player% 3000"
+      - "give %player% golden_apple 8"
   "21":
-    rewards:
-      - "money:75000"
-      - "item:NETHERITE_INGOT:5"
+    commands:
+      - "eco give %player% 5000"
+      - "give %player% golden_apple 12"
   "28":
-    rewards:
-      - "money:100000"
-      - "item:NETHERITE_BLOCK:2"
+    commands:
+      - "eco give %player% 10000"
+      - "give %player% golden_apple 16"

@@ -1,10 +1,15 @@
-
 settings:
   prefix: "&8[&bVortexDaily&8] "
   timezone: "Asia/Jakarta"
   reset-hour: 0
+
   streak-enabled: true
   streak-reset: true
+
+  monthly-reset:
+    enabled: true
+    day: 1
+
   gui-title: "&8Daily Rewards"
 
 discord-webhook:

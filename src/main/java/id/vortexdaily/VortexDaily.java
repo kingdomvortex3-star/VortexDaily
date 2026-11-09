@@ -35,6 +35,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -101,6 +102,15 @@ public final class VortexDaily extends JavaPlugin
             return;
         }
 
+        checkMonthlyReset();
+
+        Bukkit.getScheduler().runTaskTimer(
+                this,
+                this::checkMonthlyReset,
+                1200L,
+                1200L
+        );
+
         getServer().getPluginManager().registerEvents(this, this);
 
         if (getCommand("daily") != null) {
@@ -109,14 +119,18 @@ public final class VortexDaily extends JavaPlugin
         }
 
         getLogger().info("--------------------------------");
-        getLogger().info(" VortexDaily v1.1.0");
+        getLogger().info(" VortexDaily v1.2.0");
         getLogger().info(" Minecraft API: 26.3");
         getLogger().info(" Daily Rewards: 30 Days");
-        getLogger().info(" Weekly Streak: Enabled");
-        getLogger().info(" Command Rewards: Enabled");
+        getLogger().info(" Weekly Rewards: Enabled");
+        getLogger().info(" Missed Day Reset: Enabled");
+        getLogger().info(" Monthly Reset: "
+                + getConfig().getBoolean(
+                        "settings.monthly-reset.enabled", true
+                ));
+        getLogger().info(" SQLite: Enabled");
         getLogger().info(" Discord Webhook: "
-                + (getConfig().getBoolean("discord-webhook.enabled")
-                ? "Enabled" : "Disabled"));
+                + getConfig().getBoolean("discord-webhook.enabled"));
         getLogger().info("--------------------------------");
     }
 
@@ -131,6 +145,10 @@ public final class VortexDaily extends JavaPlugin
         }
     }
 
+    // ==================================================
+    // TIMEZONE
+    // ==================================================
+
     private void setupTimezone() {
         try {
             zone = ZoneId.of(
@@ -144,6 +162,25 @@ public final class VortexDaily extends JavaPlugin
             getLogger().warning("Invalid timezone. Using Asia/Jakarta.");
         }
     }
+
+    private LocalDate getToday() {
+        int resetHour = Math.max(
+                0,
+                Math.min(23, getConfig().getInt("settings.reset-hour", 0))
+        );
+
+        LocalDate today = LocalDate.now(zone);
+
+        if (LocalTime.now(zone).getHour() < resetHour) {
+            today = today.minusDays(1);
+        }
+
+        return today;
+    }
+
+    // ==================================================
+    // DATABASE
+    // ==================================================
 
     private boolean setupDatabase() {
         try {
@@ -168,6 +205,13 @@ public final class VortexDaily extends JavaPlugin
                         streak INTEGER NOT NULL DEFAULT 0
                     )
                     """);
+
+                statement.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS daily_meta (
+                        meta_key TEXT PRIMARY KEY,
+                        meta_value TEXT NOT NULL
+                    )
+                    """);
             }
 
             return true;
@@ -176,54 +220,6 @@ public final class VortexDaily extends JavaPlugin
             getLogger().severe("SQLite error: " + e.getMessage());
             return false;
         }
-    }
-
-    private LocalDate getToday() {
-        int resetHour = Math.max(
-                0,
-                Math.min(23, getConfig().getInt("settings.reset-hour", 0))
-        );
-
-        LocalDate today = LocalDate.now(zone);
-
-        if (LocalTime.now(zone).getHour() < resetHour) {
-            today = today.minusDays(1);
-        }
-
-        return today;
-    }
-
-    private int getDay(long streak) {
-        if (streak <= 0) {
-            return 1;
-        }
-
-        return (int) (((streak - 1) % 30) + 1);
-    }
-
-    private String color(String text) {
-        if (text == null) {
-            return "";
-        }
-
-        return ChatColor.translateAlternateColorCodes('&', text);
-    }
-
-    private String prefix() {
-        return color(
-                getConfig().getString(
-                        "settings.prefix",
-                        "&8[&bVortexDaily&8] "
-                )
-        );
-    }
-
-    private void sendMessage(Player player, String key) {
-        player.sendMessage(
-                prefix() + color(
-                        getConfig().getString("messages." + key, "")
-                )
-        );
     }
 
     private PlayerData getPlayerData(UUID uuid) {
@@ -273,14 +269,146 @@ public final class VortexDaily extends JavaPlugin
         }
     }
 
+    // ==================================================
+    // MONTHLY RESET
+    // ==================================================
+
+    private void checkMonthlyReset() {
+        if (!getConfig().getBoolean(
+                "settings.monthly-reset.enabled", true
+        )) {
+            return;
+        }
+
+        int resetDay = Math.max(
+                1,
+                Math.min(
+                        28,
+                        getConfig().getInt(
+                                "settings.monthly-reset.day", 1
+                        )
+                )
+        );
+
+        LocalDate today = getToday();
+
+        if (today.getDayOfMonth() < resetDay) {
+            return;
+        }
+
+        String currentMonth = YearMonth.from(today).toString();
+
+        try {
+            String previousMonth = null;
+
+            try (PreparedStatement ps = database.prepareStatement(
+                    "SELECT meta_value FROM daily_meta WHERE meta_key = ?"
+            )) {
+                ps.setString(1, "monthly_reset");
+
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        previousMonth = rs.getString("meta_value");
+                    }
+                }
+            }
+
+            // Initialize tracker without deleting existing data.
+            if (previousMonth == null) {
+                try (PreparedStatement ps = database.prepareStatement(
+                        "INSERT INTO daily_meta(meta_key, meta_value) VALUES(?, ?)"
+                )) {
+                    ps.setString(1, "monthly_reset");
+                    ps.setString(2, currentMonth);
+                    ps.executeUpdate();
+                }
+
+                getLogger().info(
+                        "Monthly reset tracker initialized: " + currentMonth
+                );
+                return;
+            }
+
+            if (previousMonth.equals(currentMonth)) {
+                return;
+            }
+
+            database.setAutoCommit(false);
+
+            try {
+                int affected;
+
+                try (PreparedStatement ps = database.prepareStatement(
+                        "UPDATE daily_players SET streak = 0, last_claim = ''"
+                )) {
+                    affected = ps.executeUpdate();
+                }
+
+                try (PreparedStatement ps = database.prepareStatement(
+                        "UPDATE daily_meta SET meta_value = ? WHERE meta_key = ?"
+                )) {
+                    ps.setString(1, currentMonth);
+                    ps.setString(2, "monthly_reset");
+                    ps.executeUpdate();
+                }
+
+                database.commit();
+
+                getLogger().info(
+                        "========================================"
+                );
+                getLogger().info(
+                        " VortexDaily Monthly Reset Completed"
+                );
+                getLogger().info(
+                        " Month: " + currentMonth
+                );
+                getLogger().info(
+                        " Players Reset: " + affected
+                );
+                getLogger().info(
+                        " All players can claim Day 1 again."
+                );
+                getLogger().info(
+                        "========================================"
+                );
+
+            } catch (Exception e) {
+                database.rollback();
+                throw e;
+
+            } finally {
+                database.setAutoCommit(true);
+            }
+
+        } catch (Exception e) {
+            getLogger().severe(
+                    "Monthly reset failed: " + e.getMessage()
+            );
+        }
+    }
+
+    // ==================================================
+    // PROGRESS / STREAK
+    // ==================================================
+
+    private int getDay(long streak) {
+        if (streak <= 0) {
+            return 1;
+        }
+
+        return (int) (((streak - 1) % 30) + 1);
+    }
+
     private Progress getProgress(Player player) {
         PlayerData data = getPlayerData(player.getUniqueId());
+
         LocalDate today = getToday();
 
         Progress progress = new Progress();
 
         long streak = data.streak;
-        progress.previousStreak = data.streak;
+        progress.previousStreak = streak;
 
         if (!data.lastClaim.isEmpty()) {
             try {
@@ -316,6 +444,10 @@ public final class VortexDaily extends JavaPlugin
 
         return progress;
     }
+
+    // ==================================================
+    // CLAIM SYSTEM
+    // ==================================================
 
     private void claim(Player player) {
         Progress progress = getProgress(player);
@@ -368,26 +500,20 @@ public final class VortexDaily extends JavaPlugin
                 "settings.streak-enabled", true
         );
 
-        boolean weeklyClaimed = false;
-        List<String> weeklyCommands = List.of();
+        ConfigurationSection weeklySection = null;
 
         if (weeklyEnabled && day % 7 == 0) {
-            String weeklyPath = "weekly-rewards." + day;
-
-            ConfigurationSection weeklySection =
-                    getConfig().getConfigurationSection(weeklyPath);
+            weeklySection = getConfig().getConfigurationSection(
+                    "weekly-rewards." + day
+            );
 
             if (weeklySection != null) {
-                weeklyCommands = weeklySection.getStringList("commands");
-
                 executeCommands(
                         player,
-                        weeklyCommands,
+                        weeklySection.getStringList("commands"),
                         day,
                         newStreak
                 );
-
-                weeklyClaimed = true;
 
                 player.sendMessage(
                         prefix() + color(
@@ -403,11 +529,7 @@ public final class VortexDaily extends JavaPlugin
                 day,
                 newStreak,
                 dailySection,
-                weeklyEnabled && weeklyClaimed
-                        ? getConfig().getConfigurationSection(
-                                "weekly-rewards." + day
-                        )
-                        : null
+                weeklySection
         );
 
         String message = getConfig().getString(
@@ -462,6 +584,39 @@ public final class VortexDaily extends JavaPlugin
         }
     }
 
+    // ==================================================
+    // GUI
+    // ==================================================
+
+    private String color(String text) {
+        if (text == null) {
+            return "";
+        }
+
+        return ChatColor.translateAlternateColorCodes('&', text);
+    }
+
+    private String prefix() {
+        return color(
+                getConfig().getString(
+                        "settings.prefix",
+                        "&8[&bVortexDaily&8] "
+                )
+        );
+    }
+
+    private void sendMessage(Player player, String key) {
+        player.sendMessage(
+                prefix() + color(
+                        getConfig().getString("messages." + key, "")
+                )
+        );
+    }
+
+    private String guiText(String path, String fallback) {
+        return getConfig().getString(path, fallback);
+    }
+
     private ItemStack createItem(
             String materialName,
             String name,
@@ -500,10 +655,6 @@ public final class VortexDaily extends JavaPlugin
         }
 
         return item;
-    }
-
-    private String guiText(String path, String fallback) {
-        return getConfig().getString(path, fallback);
     }
 
     private void openGUI(Player player) {
@@ -865,7 +1016,6 @@ public final class VortexDaily extends JavaPlugin
             ).thenAccept(response -> {
                 if (response.statusCode() < 200
                         || response.statusCode() >= 300) {
-
                     getLogger().warning(
                             "Discord webhook returned HTTP "
                                     + response.statusCode()
@@ -1113,6 +1263,8 @@ public final class VortexDaily extends JavaPlugin
                                 )
                         )
                 );
+
+                checkMonthlyReset();
             }
 
             case "reset" -> {

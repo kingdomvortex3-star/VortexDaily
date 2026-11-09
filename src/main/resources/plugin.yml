@@ -1,0 +1,27 @@
+
+name: VortexDaily
+version: 1.0.0
+main: id.vortexdaily.VortexDaily
+api-version: '26.3'
+author: Vortex
+description: Advanced Daily Reward and Streak System
+
+softdepend:
+  - Vault
+
+commands:
+  daily:
+    description: Daily reward command
+    usage: /daily
+    aliases:
+      - dailyreward
+      - dreward
+
+permissions:
+  vortexdaily.use:
+    description: Access daily rewards
+    default: true
+
+  vortexdaily.admin:
+    description: Manage daily rewards
+    default: op

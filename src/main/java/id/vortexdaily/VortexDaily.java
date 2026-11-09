@@ -1,7 +1,6 @@
 
 package id.vortexdaily;
 
-import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -19,16 +18,23 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -40,10 +46,10 @@ public final class VortexDaily extends JavaPlugin
         implements Listener, CommandExecutor, TabCompleter {
 
     private Connection database;
-    private Economy economy;
     private ZoneId zone;
+    private HttpClient httpClient;
 
-    private final int[] DAY_SLOTS = {
+    private static final int[] DAY_SLOTS = {
             10, 11, 12, 13, 14, 15, 16,
             19, 20, 21, 22, 23, 24, 25,
             28, 29, 30, 31, 32, 33, 34,
@@ -51,34 +57,64 @@ public final class VortexDaily extends JavaPlugin
             44, 45
     };
 
+    private static class PlayerData {
+        long streak;
+        String lastClaim;
+
+        PlayerData(long streak, String lastClaim) {
+            this.streak = streak;
+            this.lastClaim = lastClaim;
+        }
+    }
+
+    private static class Progress {
+        long streak;
+        int currentDay;
+        int nextDay;
+        boolean claimedToday;
+        boolean streakReset;
+    }
+
+    private static class DailyHolder implements InventoryHolder {
+        private Inventory inventory;
+
+        @Override
+        public Inventory getInventory() {
+            return inventory;
+        }
+    }
+
     @Override
     public void onEnable() {
         saveDefaultConfig();
 
-        try {
-            zone = ZoneId.of(
-                    getConfig().getString("settings.timezone", "Asia/Jakarta")
-            );
-        } catch (Exception e) {
-            zone = ZoneId.of("Asia/Jakarta");
-            getLogger().warning("Invalid timezone. Using Asia/Jakarta.");
-        }
+        httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(5))
+                .build();
 
-        if (!setupDatabase()) {
-            getLogger().severe("Could not initialize database!");
+        if (!setupTimezone() || !setupDatabase()) {
+            getLogger().severe("VortexDaily initialization failed!");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
 
-        setupEconomy();
-
         getServer().getPluginManager().registerEvents(this, this);
 
-        getCommand("daily").setExecutor(this);
-        getCommand("daily").setTabCompleter(this);
+        if (getCommand("daily") != null) {
+            getCommand("daily").setExecutor(this);
+            getCommand("daily").setTabCompleter(this);
+        }
 
-        getLogger().info("VortexDaily v1.0.0 enabled!");
-        getLogger().info("Daily Reward System: 30 Days");
+        getLogger().info("--------------------------------");
+        getLogger().info(" VortexDaily v1.1.0");
+        getLogger().info(" Minecraft API: 26.3");
+        getLogger().info(" Daily Rewards: 30 Days");
+        getLogger().info(" Weekly Streak: Enabled");
+        getLogger().info(" Command Rewards: Enabled");
+        getLogger().info(" Discord Webhook: "
+                + (getConfig().getBoolean("discord-webhook.enabled")
+                ? "Enabled" : "Disabled"));
+        getLogger().info("--------------------------------");
     }
 
     @Override
@@ -92,6 +128,22 @@ public final class VortexDaily extends JavaPlugin
         }
     }
 
+    private boolean setupTimezone() {
+        try {
+            zone = ZoneId.of(
+                    getConfig().getString(
+                            "settings.timezone",
+                            "Asia/Jakarta"
+                    )
+            );
+        } catch (Exception e) {
+            zone = ZoneId.of("Asia/Jakarta");
+            getLogger().warning("Invalid timezone. Using Asia/Jakarta.");
+        }
+
+        return true;
+    }
+
     private boolean setupDatabase() {
         try {
             File folder = getDataFolder();
@@ -103,7 +155,8 @@ public final class VortexDaily extends JavaPlugin
             Class.forName("org.sqlite.JDBC");
 
             database = DriverManager.getConnection(
-                    "jdbc:sqlite:" + new File(folder, "players.db").getAbsolutePath()
+                    "jdbc:sqlite:" +
+                    new File(folder, "players.db").getAbsolutePath()
             );
 
             try (Statement statement = database.createStatement()) {
@@ -124,46 +177,52 @@ public final class VortexDaily extends JavaPlugin
         }
     }
 
-    private void setupEconomy() {
-        if (Bukkit.getPluginManager().getPlugin("Vault") == null) {
-            getLogger().warning("Vault not found. Money rewards disabled.");
-            return;
-        }
-
-        RegisteredServiceProvider<Economy> provider =
-                Bukkit.getServicesManager().getRegistration(Economy.class);
-
-        if (provider != null) {
-            economy = provider.getProvider();
-            getLogger().info("Vault Economy hooked successfully!");
-        } else {
-            getLogger().warning("No Economy provider found!");
-        }
-    }
-
     private LocalDate getToday() {
-        int resetHour = getConfig().getInt("settings.reset-hour", 0);
-        resetHour = Math.max(0, Math.min(23, resetHour));
+        int resetHour = Math.max(
+                0,
+                Math.min(23, getConfig().getInt("settings.reset-hour", 0))
+        );
 
-        return LocalDate.now(zone).atStartOfDay()
-                .plusHours(resetHour).toLocalDate();
-    }
+        LocalDate today = LocalDate.now(zone);
 
-    private static class PlayerData {
-        long streak;
-        String lastClaim;
-
-        PlayerData(long streak, String lastClaim) {
-            this.streak = streak;
-            this.lastClaim = lastClaim;
+        if (LocalTime.now(zone).getHour() < resetHour) {
+            today = today.minusDays(1);
         }
+
+        return today;
     }
 
-    private static class Progress {
-        long streak;
-        int currentDay;
-        int nextDay;
-        boolean claimedToday;
+    private int getDay(long streak) {
+        if (streak <= 0) {
+            return 1;
+        }
+
+        return (int) (((streak - 1) % 30) + 1);
+    }
+
+    private String color(String text) {
+        if (text == null) {
+            return "";
+        }
+
+        return ChatColor.translateAlternateColorCodes('&', text);
+    }
+
+    private String prefix() {
+        return color(
+                getConfig().getString(
+                        "settings.prefix",
+                        "&8[&bVortexDaily&8] "
+                )
+        );
+    }
+
+    private void sendMessage(Player player, String key) {
+        player.sendMessage(
+                prefix() + color(
+                        getConfig().getString("messages." + key, "")
+                )
+        );
     }
 
     private PlayerData getPlayerData(UUID uuid) {
@@ -180,6 +239,7 @@ public final class VortexDaily extends JavaPlugin
                     );
                 }
             }
+
         } catch (Exception e) {
             getLogger().severe("Database read error: " + e.getMessage());
         }
@@ -187,7 +247,11 @@ public final class VortexDaily extends JavaPlugin
         return new PlayerData(0, "");
     }
 
-    private void savePlayerData(UUID uuid, long streak, LocalDate date) {
+    private boolean savePlayerData(
+            UUID uuid,
+            long streak,
+            LocalDate date
+    ) {
         try (PreparedStatement ps = database.prepareStatement("""
                 INSERT INTO daily_players(uuid, last_claim, streak)
                 VALUES(?, ?, ?)
@@ -199,10 +263,12 @@ public final class VortexDaily extends JavaPlugin
             ps.setString(1, uuid.toString());
             ps.setString(2, date.toString());
             ps.setLong(3, streak);
-            ps.executeUpdate();
+
+            return ps.executeUpdate() > 0;
 
         } catch (Exception e) {
             getLogger().severe("Database save error: " + e.getMessage());
+            return false;
         }
     }
 
@@ -220,56 +286,44 @@ public final class VortexDaily extends JavaPlugin
                 progress.claimedToday = last.equals(today);
 
                 if (!progress.claimedToday
-                        && getConfig().getBoolean("settings.streak-reset", true)
+                        && getConfig().getBoolean(
+                                "settings.streak-reset", true
+                        )
                         && !last.plusDays(1).equals(today)) {
+
+                    progress.streakReset = streak > 0;
                     streak = 0;
                 }
+
             } catch (Exception e) {
+                progress.streakReset = streak > 0;
                 streak = 0;
             }
         }
 
         progress.streak = streak;
-        progress.currentDay = streak == 0 ? 0 : getDay(streak);
 
         if (progress.claimedToday) {
-            progress.nextDay = getDay(Math.max(1, streak));
+            progress.currentDay = getDay(streak);
+            progress.nextDay = getDay(streak);
         } else {
+            progress.currentDay = (int) (streak % 30);
             progress.nextDay = getDay(streak + 1);
         }
 
         return progress;
     }
 
-    private int getDay(long streak) {
-        if (streak <= 0) return 1;
-        return (int) (((streak - 1) % 30) + 1);
-    }
-
-    private String color(String text) {
-        if (text == null) return "";
-
-        return ChatColor.translateAlternateColorCodes('&', text);
-    }
-
-    private String prefix() {
-        return color(getConfig().getString(
-                "settings.prefix", "&8[&bVortexDaily&8] "
-        ));
-    }
-
-    private void message(Player player, String key) {
-        player.sendMessage(prefix() + color(
-                getConfig().getString("messages." + key, "")
-        ));
-    }
-
     private void claim(Player player) {
         Progress progress = getProgress(player);
 
         if (progress.claimedToday) {
-            message(player, "already-claimed");
+            sendMessage(player, "already-claimed");
             return;
+        }
+
+        if (progress.streakReset) {
+            sendStreakResetWebhook(player, progress.streak);
         }
 
         long newStreak = progress.streak + 1;
@@ -277,116 +331,123 @@ public final class VortexDaily extends JavaPlugin
 
         LocalDate today = getToday();
 
-        savePlayerData(player.getUniqueId(), newStreak, today);
-
-        ConfigurationSection daily = getConfig()
-                .getConfigurationSection("daily-rewards." + day);
-
-        if (daily != null) {
-            executeRewards(player, daily.getStringList("rewards"));
+        if (!savePlayerData(
+                player.getUniqueId(),
+                newStreak,
+                today
+        )) {
+            player.sendMessage(
+                    prefix() + color("&cGagal menyimpan data reward!")
+            );
+            return;
         }
 
-        boolean weekly = day % 7 == 0;
+        String dailyPath = "daily-rewards." + day;
 
-        if (weekly) {
-            ConfigurationSection bonus = getConfig()
-                    .getConfigurationSection("weekly-rewards." + day);
+        ConfigurationSection dailySection =
+                getConfig().getConfigurationSection(dailyPath);
 
-            if (bonus != null) {
-                executeRewards(player, bonus.getStringList("rewards"));
+        List<String> dailyCommands = dailySection == null
+                ? List.of()
+                : dailySection.getStringList("commands");
 
-                player.sendMessage(prefix()
-                        + color("&6&lWEEKLY BONUS &7Day " + day + " berhasil diklaim!"));
+        executeCommands(
+                player,
+                dailyCommands,
+                day,
+                newStreak
+        );
+
+        boolean weeklyEnabled = getConfig().getBoolean(
+                "settings.streak-enabled", true
+        );
+
+        boolean weeklyClaimed = false;
+        List<String> weeklyCommands = List.of();
+
+        if (weeklyEnabled && day % 7 == 0) {
+            String weeklyPath = "weekly-rewards." + day;
+
+            ConfigurationSection weeklySection =
+                    getConfig().getConfigurationSection(weeklyPath);
+
+            if (weeklySection != null) {
+                weeklyCommands = weeklySection.getStringList("commands");
+
+                executeCommands(
+                        player,
+                        weeklyCommands,
+                        day,
+                        newStreak
+                );
+
+                weeklyClaimed = true;
+
+                player.sendMessage(
+                        prefix() + color(
+                                "&6&lWEEKLY BONUS &7Day "
+                                        + day + " berhasil diklaim!"
+                        )
+                );
             }
         }
 
-        String msg = getConfig().getString(
+        sendClaimWebhook(
+                player,
+                day,
+                newStreak,
+                dailyCommands,
+                weeklyCommands,
+                weeklyClaimed
+        );
+
+        String message = getConfig().getString(
                 "messages.claimed",
                 "&aBerhasil mengambil hadiah Day %day%!"
         );
 
-        player.sendMessage(prefix() + color(
-                msg.replace("%day%", String.valueOf(day))
-        ));
+        player.sendMessage(
+                prefix() + color(
+                        message.replace(
+                                "%day%",
+                                String.valueOf(day)
+                        )
+                )
+        );
     }
 
-    private void executeRewards(Player player, List<String> rewards) {
-        for (String reward : rewards) {
+    private void executeCommands(
+            Player player,
+            List<String> commands,
+            int day,
+            long streak
+    ) {
+        for (String rawCommand : commands) {
+            if (rawCommand == null || rawCommand.isBlank()) {
+                continue;
+            }
+
+            String command = rawCommand
+                    .replace("%player%", player.getName())
+                    .replace("%uuid%", player.getUniqueId().toString())
+                    .replace("%day%", String.valueOf(day))
+                    .replace("%streak%", String.valueOf(streak))
+                    .trim();
+
+            if (command.startsWith("/")) {
+                command = command.substring(1);
+            }
+
             try {
-                String[] parts = reward.split(":", 3);
-
-                if (parts.length < 2) continue;
-
-                String type = parts[0].toLowerCase(Locale.ROOT);
-                String value = parts[1];
-
-                switch (type) {
-                    case "money" -> {
-                        if (economy == null) {
-                            getLogger().warning("Money reward skipped: Vault unavailable.");
-                            continue;
-                        }
-
-                        double amount = Double.parseDouble(value);
-
-                        if (amount > 0) {
-                            economy.depositPlayer(player, amount);
-                        }
-                    }
-
-                    case "item" -> {
-                        if (parts.length < 3) continue;
-
-                        Material material = Material.matchMaterial(value);
-                        int amount = Integer.parseInt(parts[2]);
-
-                        if (material == null || amount <= 0) continue;
-
-                        int maxStack = material.getMaxStackSize();
-
-                        while (amount > 0) {
-                            int give = Math.min(amount, maxStack);
-
-                            ItemStack item = new ItemStack(material, give);
-
-                            player.getInventory().addItem(item)
-                                    .values()
-                                    .forEach(left ->
-                                            player.getWorld().dropItemNaturally(
-                                                    player.getLocation(), left
-                                            )
-                                    );
-
-                            amount -= give;
-                        }
-                    }
-
-                    case "exp" -> {
-                        int amount = Integer.parseInt(value);
-
-                        if (amount > 0) {
-                            player.giveExp(amount);
-                        }
-                    }
-
-                    case "command" -> {
-                        String command = reward.substring("command:".length())
-                                .replace("%player%", player.getName());
-
-                        Bukkit.dispatchCommand(
-                                Bukkit.getConsoleSender(), command
-                        );
-                    }
-
-                    default -> getLogger().warning(
-                            "Unknown reward type: " + type
-                    );
-                }
-
+                Bukkit.dispatchCommand(
+                        Bukkit.getConsoleSender(),
+                        command
+                );
             } catch (Exception e) {
                 getLogger().warning(
-                        "Could not execute reward '" + reward + "': " + e.getMessage()
+                        "Failed to execute reward command: " + command
                 );
+                getLogger().warning(e.getMessage());
             }
         }
     }
@@ -408,16 +469,20 @@ public final class VortexDaily extends JavaPlugin
         ItemMeta meta = item.getItemMeta();
 
         if (meta != null) {
-            meta.setDisplayName(color(name
-                    .replace("%day%", String.valueOf(day))
-                    .replace("%streak%", String.valueOf(streak))));
+            meta.setDisplayName(
+                    color(name
+                            .replace("%day%", String.valueOf(day))
+                            .replace("%streak%", String.valueOf(streak)))
+            );
 
             List<String> coloredLore = new ArrayList<>();
 
             for (String line : lore) {
-                coloredLore.add(color(line
-                        .replace("%day%", String.valueOf(day))
-                        .replace("%streak%", String.valueOf(streak))));
+                coloredLore.add(
+                        color(line
+                                .replace("%day%", String.valueOf(day))
+                                .replace("%streak%", String.valueOf(streak)))
+                );
             }
 
             meta.setLore(coloredLore);
@@ -434,8 +499,10 @@ public final class VortexDaily extends JavaPlugin
     private void openGUI(Player player) {
         Progress progress = getProgress(player);
 
-        int rows = getConfig().getInt("gui.rows", 6);
-        rows = Math.max(1, Math.min(6, rows));
+        int rows = Math.max(
+                1,
+                Math.min(6, getConfig().getInt("gui.rows", 6))
+        );
 
         DailyHolder holder = new DailyHolder();
 
@@ -443,7 +510,8 @@ public final class VortexDaily extends JavaPlugin
                 holder,
                 rows * 9,
                 color(getConfig().getString(
-                        "settings.gui-title", "&8Daily Rewards"
+                        "settings.gui-title",
+                        "&8Daily Rewards"
                 ))
         );
 
@@ -451,7 +519,10 @@ public final class VortexDaily extends JavaPlugin
 
         if (getConfig().getBoolean("gui.filler.enabled", true)) {
             ItemStack filler = createItem(
-                    guiText("gui.filler.material", "BLACK_STAINED_GLASS_PANE"),
+                    guiText(
+                            "gui.filler.material",
+                            "BLACK_STAINED_GLASS_PANE"
+                    ),
                     guiText("gui.filler.name", " "),
                     List.of(),
                     0,
@@ -466,28 +537,30 @@ public final class VortexDaily extends JavaPlugin
         for (int day = 1; day <= 30; day++) {
             int slot = DAY_SLOTS[day - 1];
 
-            if (slot >= inventory.getSize()) continue;
+            if (slot >= inventory.getSize()) {
+                continue;
+            }
 
             String path;
-            String material;
-            String name;
-            List<String> lore;
 
             if (day <= progress.currentDay) {
                 path = "gui.claimed";
-            } else if (!progress.claimedToday && day == progress.nextDay) {
+            } else if (!progress.claimedToday
+                    && day == progress.nextDay) {
                 path = "gui.available";
             } else {
                 path = "gui.locked";
             }
 
-            material = guiText(path + ".material", "CHEST");
-            name = guiText(path + ".name", "&fDay %day%");
-            lore = getConfig().getStringList(path + ".lore");
-
             inventory.setItem(
                     slot,
-                    createItem(material, name, lore, day, progress.streak)
+                    createItem(
+                            guiText(path + ".material", "CHEST"),
+                            guiText(path + ".name", "&fDay %day%"),
+                            getConfig().getStringList(path + ".lore"),
+                            day,
+                            progress.streak
+                    )
             );
         }
 
@@ -524,15 +597,6 @@ public final class VortexDaily extends JavaPlugin
         player.openInventory(inventory);
     }
 
-    private static class DailyHolder implements InventoryHolder {
-        private Inventory inventory;
-
-        @Override
-        public Inventory getInventory() {
-            return inventory;
-        }
-    }
-
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getView().getTopInventory().getHolder()
@@ -547,7 +611,8 @@ public final class VortexDaily extends JavaPlugin
         }
 
         if (event.getClickedInventory() == null
-                || event.getClickedInventory() != event.getView().getTopInventory()) {
+                || event.getClickedInventory()
+                != event.getView().getTopInventory()) {
             return;
         }
 
@@ -564,12 +629,325 @@ public final class VortexDaily extends JavaPlugin
         if (event.getRawSlot() == streakSlot) {
             Progress progress = getProgress(player);
 
-            player.sendMessage(prefix() + color(
-                    "&bStreak: &f" + progress.streak
-                            + " &7| Next: &eDay " + progress.nextDay
-            ));
+            player.sendMessage(
+                    prefix() + color(
+                            "&bStreak: &f" + progress.streak
+                                    + " &7| Next: &eDay "
+                                    + progress.nextDay
+                    )
+            );
         }
     }
+
+    // --------------------------------------------------
+    // DISCORD WEBHOOK
+    // --------------------------------------------------
+
+    private boolean webhookEnabled(String event) {
+        return getConfig().getBoolean("discord-webhook.enabled", false)
+                && getConfig().getBoolean(
+                        "discord-webhook.events." + event,
+                        true
+                );
+    }
+
+    private String escapeJson(String input) {
+        if (input == null) {
+            return "";
+        }
+
+        StringBuilder result = new StringBuilder();
+
+        for (char c : input.toCharArray()) {
+            switch (c) {
+                case '"' -> result.append("\\\"");
+                case '\\' -> result.append("\\\\");
+                case '\n' -> result.append("\\n");
+                case '\r' -> result.append("\\r");
+                case '\t' -> result.append("\\t");
+                default -> {
+                    if (c < 32) {
+                        result.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        result.append(c);
+                    }
+                }
+            }
+        }
+
+        return result.toString();
+    }
+
+    private String commandDisplay(List<String> commands) {
+        if (commands == null || commands.isEmpty()) {
+            return "`No commands configured`";
+        }
+
+        StringBuilder result = new StringBuilder("```yaml\n");
+
+        for (String command : commands) {
+            String line = command.replace("```", "'''");
+
+            if (result.length() + line.length() + 2 > 950) {
+                result.append("...more commands");
+                break;
+            }
+
+            result.append("- ").append(line).append("\n");
+        }
+
+        result.append("```");
+
+        return result.toString();
+    }
+
+    private String discordField(
+            String name,
+            String value,
+            boolean inline
+    ) {
+        return "{"
+                + "\"name\":\"" + escapeJson(name) + "\","
+                + "\"value\":\"" + escapeJson(value) + "\","
+                + "\"inline\":" + inline
+                + "}";
+    }
+
+    private void sendWebhook(
+            String event,
+            String title,
+            String description,
+            int color,
+            List<String> fields
+    ) {
+        if (!webhookEnabled(event)) {
+            return;
+        }
+
+        String url = getConfig().getString(
+                "discord-webhook.url",
+                ""
+        );
+
+        if (url == null || url.isBlank()) {
+            return;
+        }
+
+        if (!(url.startsWith("https://discord.com/api/webhooks/")
+                || url.startsWith("https://discordapp.com/api/webhooks/"))) {
+            getLogger().warning(
+                    "Invalid Discord webhook URL. Check config.yml."
+            );
+            return;
+        }
+
+        String username = getConfig().getString(
+                "discord-webhook.username",
+                "VortexDaily"
+        );
+
+        String avatar = getConfig().getString(
+                "discord-webhook.avatar-url",
+                ""
+        );
+
+        String footer = getConfig().getString(
+                "discord-webhook.embed.footer",
+                "VortexDaily • Automatic Notification"
+        );
+
+        StringBuilder json = new StringBuilder();
+
+        json.append("{")
+                .append("\"username\":\"")
+                .append(escapeJson(username))
+                .append("\",");
+
+        if (avatar != null && !avatar.isBlank()) {
+            json.append("\"avatar_url\":\"")
+                    .append(escapeJson(avatar))
+                    .append("\",");
+        }
+
+        json.append("\"allowed_mentions\":{\"parse\":[]},")
+                .append("\"embeds\":[{")
+                .append("\"title\":\"")
+                .append(escapeJson(title))
+                .append("\",")
+                .append("\"description\":\"")
+                .append(escapeJson(description))
+                .append("\",")
+                .append("\"color\":")
+                .append(color)
+                .append(",");
+
+        json.append("\"fields\":[");
+
+        for (int i = 0; i < fields.size(); i++) {
+            if (i > 0) {
+                json.append(",");
+            }
+
+            json.append(fields.get(i));
+        }
+
+        json.append("],");
+
+        json.append("\"footer\":{\"text\":\"")
+                .append(escapeJson(footer))
+                .append("\"},");
+
+        json.append("\"timestamp\":\"")
+                .append(Instant.now())
+                .append("\"");
+
+        json.append("}]}");
+
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(
+                            json.toString(),
+                            StandardCharsets.UTF_8
+                    ))
+                    .build();
+
+            httpClient.sendAsync(
+                    request,
+                    HttpResponse.BodyHandlers.discarding()
+            ).thenAccept(response -> {
+                if (response.statusCode() < 200
+                        || response.statusCode() >= 300) {
+                    getLogger().warning(
+                            "Discord webhook returned HTTP "
+                                    + response.statusCode()
+                    );
+                }
+            }).exceptionally(error -> {
+                getLogger().warning(
+                        "Discord webhook failed: " + error.getMessage()
+                );
+                return null;
+            });
+
+        } catch (Exception e) {
+            getLogger().warning(
+                    "Could not send Discord webhook: " + e.getMessage()
+            );
+        }
+    }
+
+    private void sendClaimWebhook(
+            Player player,
+            int day,
+            long streak,
+            List<String> dailyCommands,
+            List<String> weeklyCommands,
+            boolean weeklyClaimed
+    ) {
+        boolean dailyEnabled = webhookEnabled("daily-claim");
+        boolean weeklyEnabled = weeklyClaimed
+                && webhookEnabled("weekly-bonus");
+
+        if (!dailyEnabled && !weeklyEnabled) {
+            return;
+        }
+
+        List<String> fields = new ArrayList<>();
+
+        fields.add(discordField(
+                "👤 Player",
+                "**" + player.getName() + "**\n`"
+                        + player.getUniqueId() + "`",
+                false
+        ));
+
+        fields.add(discordField(
+                "📅 Daily Progress",
+                "**Day " + day + " / 30**",
+                true
+        ));
+
+        fields.add(discordField(
+                "🔥 Current Streak",
+                "**" + streak + " Days**",
+                true
+        ));
+
+        fields.add(discordField(
+                "🎁 Daily Rewards",
+                commandDisplay(dailyCommands),
+                false
+        ));
+
+        if (weeklyClaimed && weeklyEnabled) {
+            fields.add(discordField(
+                    "🏆 Weekly Bonus",
+                    commandDisplay(weeklyCommands),
+                    false
+            ));
+        }
+
+        String title = weeklyClaimed && weeklyEnabled
+                ? "🏆 Weekly Bonus Claimed!"
+                : "🎁 Daily Reward Claimed!";
+
+        String description = weeklyClaimed && weeklyEnabled
+                ? "A player has successfully claimed their daily reward and weekly bonus!"
+                : "A player has successfully claimed their daily reward.";
+
+        int color = getConfig().getInt(
+                "discord-webhook.embed.color",
+                5793266
+        );
+
+        sendWebhook(
+                "daily-claim",
+                title,
+                description,
+                color,
+                fields
+        );
+    }
+
+    private void sendStreakResetWebhook(
+            Player player,
+            long previousStreak
+    ) {
+        List<String> fields = new ArrayList<>();
+
+        fields.add(discordField(
+                "👤 Player",
+                "**" + player.getName() + "**",
+                true
+        ));
+
+        fields.add(discordField(
+                "🔥 Previous Streak",
+                "**" + previousStreak + " Days**",
+                true
+        ));
+
+        fields.add(discordField(
+                "📅 New Progress",
+                "**Day 1 / 30**",
+                true
+        ));
+
+        sendWebhook(
+                "streak-reset",
+                "⚠️ Daily Streak Reset",
+                "A player missed their daily claim period. Their streak has been reset.",
+                15158332,
+                fields
+        );
+    }
+
+    // --------------------------------------------------
+    // COMMANDS
+    // --------------------------------------------------
 
     @Override
     public boolean onCommand(
@@ -580,13 +958,14 @@ public final class VortexDaily extends JavaPlugin
     ) {
         if (args.length == 0) {
             if (!(sender instanceof Player player)) {
-                sender.sendMessage("Only players can open Daily GUI.");
+                sender.sendMessage(
+                        "Only players can open Daily GUI."
+                );
                 return true;
             }
 
             if (!player.hasPermission("vortexdaily.use")) {
-                player.sendMessage(prefix()
-                        + color(getConfig().getString("messages.no-permission")));
+                sendMessage(player, "no-permission");
                 return true;
             }
 
@@ -599,12 +978,14 @@ public final class VortexDaily extends JavaPlugin
         switch (sub) {
             case "claim" -> {
                 if (!(sender instanceof Player player)) {
-                    sender.sendMessage("Only players can claim rewards.");
+                    sender.sendMessage(
+                            "Only players can claim rewards."
+                    );
                     return true;
                 }
 
                 if (!player.hasPermission("vortexdaily.use")) {
-                    message(player, "no-permission");
+                    sendMessage(player, "no-permission");
                     return true;
                 }
 
@@ -613,78 +994,121 @@ public final class VortexDaily extends JavaPlugin
 
             case "streak" -> {
                 if (!(sender instanceof Player player)) {
-                    sender.sendMessage("Only players can view streak.");
+                    sender.sendMessage(
+                            "Only players can view streak."
+                    );
                     return true;
                 }
 
                 Progress progress = getProgress(player);
 
-                player.sendMessage(prefix() + color(
-                        getConfig().getString("messages.streak-info")
-                                .replace("%streak%", String.valueOf(progress.streak))
-                ));
+                player.sendMessage(
+                        prefix() + color(
+                                getConfig().getString(
+                                        "messages.streak-info",
+                                        "&bStreak: &f%streak%"
+                                ).replace(
+                                        "%streak%",
+                                        String.valueOf(progress.streak)
+                                )
+                        )
+                );
 
-                player.sendMessage(prefix() + color(
-                        "&7Hari berikutnya: &eDay " + progress.nextDay
-                ));
+                player.sendMessage(
+                        prefix() + color(
+                                "&7Hari berikutnya: &eDay "
+                                        + progress.nextDay
+                        )
+                );
             }
 
             case "reload" -> {
                 if (!sender.hasPermission("vortexdaily.admin")) {
-                    sender.sendMessage(prefix()
-                            + color(getConfig().getString("messages.no-permission")));
+                    sender.sendMessage(
+                            prefix() + color(
+                                    getConfig().getString(
+                                            "messages.no-permission"
+                                    )
+                            )
+                    );
                     return true;
                 }
 
                 reloadConfig();
+                setupTimezone();
 
-                try {
-                    zone = ZoneId.of(getConfig().getString(
-                            "settings.timezone", "Asia/Jakarta"
-                    ));
-                } catch (Exception e) {
-                    zone = ZoneId.of("Asia/Jakarta");
-                }
-
-                sender.sendMessage(prefix()
-                        + color(getConfig().getString("messages.reload")));
+                sender.sendMessage(
+                        prefix() + color(
+                                getConfig().getString("messages.reload")
+                        )
+                );
             }
 
             case "reset" -> {
                 if (!sender.hasPermission("vortexdaily.admin")) {
-                    sender.sendMessage(prefix()
-                            + color(getConfig().getString("messages.no-permission")));
+                    sender.sendMessage(
+                            prefix() + color(
+                                    getConfig().getString(
+                                            "messages.no-permission"
+                                    )
+                            )
+                    );
                     return true;
                 }
 
                 if (args.length < 2) {
-                    sender.sendMessage(color("&c/daily reset <player>"));
+                    sender.sendMessage(
+                            color("&c/daily reset <player>")
+                    );
                     return true;
                 }
 
-                OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
+                OfflinePlayer target =
+                        Bukkit.getOfflinePlayer(args[1]);
 
                 try (PreparedStatement ps = database.prepareStatement(
                         "DELETE FROM daily_players WHERE uuid = ?"
                 )) {
-                    ps.setString(1, target.getUniqueId().toString());
+                    ps.setString(
+                            1,
+                            target.getUniqueId().toString()
+                    );
+
                     ps.executeUpdate();
 
-                    sender.sendMessage(prefix() + color(
-                            getConfig().getString("messages.reset")
-                                    .replace("%player%", args[1])
-                    ));
+                    sender.sendMessage(
+                            prefix() + color(
+                                    getConfig().getString(
+                                            "messages.reset",
+                                            "&aData Daily %player% berhasil direset!"
+                                    ).replace(
+                                            "%player%",
+                                            args[1]
+                                    )
+                            )
+                    );
 
                 } catch (Exception e) {
-                    sender.sendMessage(prefix() + color("&cDatabase error."));
-                    getLogger().severe("Reset error: " + e.getMessage());
+                    sender.sendMessage(
+                            prefix() + color("&cDatabase error.")
+                    );
+
+                    getLogger().severe(
+                            "Reset error: " + e.getMessage()
+                    );
                 }
             }
 
-            default -> sender.sendMessage(color(
-                    "&bVortexDaily &7Commands: /daily, /daily claim, "
-                            + "/daily streak, /daily reload, /daily reset <player>"
-            ));
+            default -> sender.sendMessage(
+                    color(
+                            "&bVortexDaily &7Commands:\n"
+                                    + "&f/daily\n"
+                                    + "&f/daily claim\n"
+                                    + "&f/daily streak\n"
+                                    + "&f/daily reload\n"
+                                    + "&f/daily reset <player>"
+                    )
+            );
         }
 
         return true;
@@ -698,18 +1122,29 @@ public final class VortexDaily extends JavaPlugin
             String[] args
     ) {
         if (args.length == 1) {
-            return Arrays.asList("claim", "streak", "reload", "reset")
+            return Arrays.asList(
+                            "claim",
+                            "streak",
+                            "reload",
+                            "reset"
+                    )
                     .stream()
-                    .filter(s -> s.startsWith(args[0].toLowerCase(Locale.ROOT)))
+                    .filter(s -> s.startsWith(
+                            args[0].toLowerCase(Locale.ROOT)
+                    ))
                     .toList();
         }
 
-        if (args.length == 2 && args[0].equalsIgnoreCase("reset")
+        if (args.length == 2
+                && args[0].equalsIgnoreCase("reset")
                 && sender.hasPermission("vortexdaily.admin")) {
+
             return Bukkit.getOnlinePlayers().stream()
                     .map(Player::getName)
                     .filter(s -> s.toLowerCase(Locale.ROOT)
-                            .startsWith(args[1].toLowerCase(Locale.ROOT)))
+                            .startsWith(
+                                    args[1].toLowerCase(Locale.ROOT)
+                            ))
                     .toList();
         }
 

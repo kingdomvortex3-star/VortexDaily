@@ -17,7 +17,7 @@ discord-webhook:
 
   embed:
     color: 5793266
-    footer: "VortexDaily • Automatic Notification"
+    footer: "VortexDaily • Automatic Reward Notification"
 
   events:
     daily-claim: true
@@ -78,141 +78,277 @@ gui:
       - "&7Selesaikan hari sebelumnya."
 
 daily-rewards:
+
   "1":
+    display:
+      - "💰 $150 Money"
+      - "🍞 16x Bread"
     commands:
       - "eco give %player% 150"
       - "give %player% bread 16"
+
   "2":
+    display:
+      - "💰 $200 Money"
+      - "🥩 16x Cooked Beef"
     commands:
       - "eco give %player% 200"
       - "give %player% cooked_beef 16"
+
   "3":
+    display:
+      - "💰 $250 Money"
+      - "🥕 8x Golden Carrot"
     commands:
       - "eco give %player% 250"
       - "give %player% golden_carrot 8"
+
   "4":
+    display:
+      - "💰 $300 Money"
+      - "🍞 24x Bread"
     commands:
       - "eco give %player% 300"
       - "give %player% bread 24"
+
   "5":
+    display:
+      - "💰 $350 Money"
+      - "🍗 24x Cooked Chicken"
     commands:
       - "eco give %player% 350"
       - "give %player% cooked_chicken 24"
+
   "6":
+    display:
+      - "💰 $400 Money"
+      - "🥕 16x Golden Carrot"
     commands:
       - "eco give %player% 400"
       - "give %player% golden_carrot 16"
+
   "7":
+    display:
+      - "💰 $500 Money"
+      - "🥩 32x Cooked Beef"
     commands:
       - "eco give %player% 500"
       - "give %player% cooked_beef 32"
+
   "8":
+    display:
+      - "💰 $550 Money"
+      - "🍞 32x Bread"
     commands:
       - "eco give %player% 550"
       - "give %player% bread 32"
+
   "9":
+    display:
+      - "💰 $600 Money"
+      - "🥩 24x Cooked Beef"
     commands:
       - "eco give %player% 600"
       - "give %player% cooked_beef 24"
+
   "10":
+    display:
+      - "💰 $650 Money"
+      - "🥕 16x Golden Carrot"
     commands:
       - "eco give %player% 650"
       - "give %player% golden_carrot 16"
+
   "11":
+    display:
+      - "💰 $700 Money"
+      - "🍗 32x Cooked Chicken"
     commands:
       - "eco give %player% 700"
       - "give %player% cooked_chicken 32"
+
   "12":
+    display:
+      - "💰 $750 Money"
+      - "🥕 24x Golden Carrot"
     commands:
       - "eco give %player% 750"
       - "give %player% golden_carrot 24"
+
   "13":
+    display:
+      - "💰 $800 Money"
+      - "🥩 32x Cooked Beef"
     commands:
       - "eco give %player% 800"
       - "give %player% cooked_beef 32"
+
   "14":
+    display:
+      - "💰 $1,000 Money"
+      - "🥕 32x Golden Carrot"
     commands:
       - "eco give %player% 1000"
       - "give %player% golden_carrot 32"
+
   "15":
+    display:
+      - "💰 $1,100 Money"
+      - "🍞 32x Bread"
     commands:
       - "eco give %player% 1100"
       - "give %player% bread 32"
+
   "16":
+    display:
+      - "💰 $1,200 Money"
+      - "🥩 32x Cooked Beef"
     commands:
       - "eco give %player% 1200"
       - "give %player% cooked_beef 32"
+
   "17":
+    display:
+      - "💰 $1,300 Money"
+      - "🥕 24x Golden Carrot"
     commands:
       - "eco give %player% 1300"
       - "give %player% golden_carrot 24"
+
   "18":
+    display:
+      - "💰 $1,400 Money"
+      - "🍗 32x Cooked Chicken"
     commands:
       - "eco give %player% 1400"
       - "give %player% cooked_chicken 32"
+
   "19":
+    display:
+      - "💰 $1,500 Money"
+      - "🥕 32x Golden Carrot"
     commands:
       - "eco give %player% 1500"
       - "give %player% golden_carrot 32"
+
   "20":
+    display:
+      - "💰 $1,600 Money"
+      - "🥩 48x Cooked Beef"
     commands:
       - "eco give %player% 1600"
       - "give %player% cooked_beef 48"
+
   "21":
+    display:
+      - "💰 $1,800 Money"
+      - "🥕 48x Golden Carrot"
     commands:
       - "eco give %player% 1800"
       - "give %player% golden_carrot 48"
+
   "22":
+    display:
+      - "💰 $1,900 Money"
+      - "🍞 48x Bread"
     commands:
       - "eco give %player% 1900"
       - "give %player% bread 48"
+
   "23":
+    display:
+      - "💰 $2,000 Money"
+      - "🥩 48x Cooked Beef"
     commands:
       - "eco give %player% 2000"
       - "give %player% cooked_beef 48"
+
   "24":
+    display:
+      - "💰 $2,200 Money"
+      - "🥕 48x Golden Carrot"
     commands:
       - "eco give %player% 2200"
       - "give %player% golden_carrot 48"
+
   "25":
+    display:
+      - "💰 $2,400 Money"
+      - "🍗 48x Cooked Chicken"
     commands:
       - "eco give %player% 2400"
       - "give %player% cooked_chicken 48"
+
   "26":
+    display:
+      - "💰 $2,600 Money"
+      - "🥕 48x Golden Carrot"
     commands:
       - "eco give %player% 2600"
       - "give %player% golden_carrot 48"
+
   "27":
+    display:
+      - "💰 $2,800 Money"
+      - "🥩 64x Cooked Beef"
     commands:
       - "eco give %player% 2800"
       - "give %player% cooked_beef 64"
+
   "28":
+    display:
+      - "💰 $3,000 Money"
+      - "🥕 64x Golden Carrot"
     commands:
       - "eco give %player% 3000"
       - "give %player% golden_carrot 64"
+
   "29":
+    display:
+      - "💰 $3,500 Money"
+      - "🥩 64x Cooked Beef"
     commands:
       - "eco give %player% 3500"
       - "give %player% cooked_beef 64"
+
   "30":
+    display:
+      - "💰 $5,000 Money"
+      - "🍎 16x Golden Apple"
     commands:
       - "eco give %player% 5000"
       - "give %player% golden_apple 16"
 
 weekly-rewards:
+
   "7":
+    display:
+      - "💰 $1,500 Money"
+      - "🍎 4x Golden Apple"
     commands:
       - "eco give %player% 1500"
       - "give %player% golden_apple 4"
+
   "14":
+    display:
+      - "💰 $3,000 Money"
+      - "🍎 8x Golden Apple"
     commands:
       - "eco give %player% 3000"
       - "give %player% golden_apple 8"
+
   "21":
+    display:
+      - "💰 $5,000 Money"
+      - "🍎 12x Golden Apple"
     commands:
       - "eco give %player% 5000"
       - "give %player% golden_apple 12"
+
   "28":
+    display:
+      - "💰 $10,000 Money"
+      - "🍎 16x Golden Apple"
     commands:
       - "eco give %player% 10000"
       - "give %player% golden_apple 16"

@@ -11,18 +11,16 @@ repositories {
     mavenCentral()
 
     maven {
-        name = 'papermc'
         url = 'https://repo.papermc.io/repository/maven-public/'
     }
 
     maven {
-        name = 'jitpack'
         url = 'https://jitpack.io'
     }
 }
 
 dependencies {
-    compileOnly 'io.papermc.paper:paper-api:26.3.build.+'
+    compileOnly 'io.papermc.paper:paper-api:26.3.build.2654-stable'
     compileOnly 'com.github.MilkBowl:VaultAPI:1.7'
 
     implementation 'org.xerial:sqlite-jdbc:3.50.3.0'
@@ -42,7 +40,8 @@ tasks.withType(JavaCompile).configureEach {
 shadowJar {
     archiveClassifier = ''
 
-    relocate 'org.sqlite', 'id.vortexdaily.libs.sqlite'
+    relocate 'org.sqlite',
+        'id.vortexdaily.libs.sqlite'
 }
 
 tasks.build {

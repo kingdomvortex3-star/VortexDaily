@@ -69,6 +69,7 @@ public final class VortexDaily extends JavaPlugin
 
     private static class Progress {
         long streak;
+        long previousStreak;
         int currentDay;
         int nextDay;
         boolean claimedToday;
@@ -92,8 +93,10 @@ public final class VortexDaily extends JavaPlugin
                 .connectTimeout(Duration.ofSeconds(5))
                 .build();
 
-        if (!setupTimezone() || !setupDatabase()) {
-            getLogger().severe("VortexDaily initialization failed!");
+        setupTimezone();
+
+        if (!setupDatabase()) {
+            getLogger().severe("VortexDaily database initialization failed!");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
@@ -128,7 +131,7 @@ public final class VortexDaily extends JavaPlugin
         }
     }
 
-    private boolean setupTimezone() {
+    private void setupTimezone() {
         try {
             zone = ZoneId.of(
                     getConfig().getString(
@@ -140,8 +143,6 @@ public final class VortexDaily extends JavaPlugin
             zone = ZoneId.of("Asia/Jakarta");
             getLogger().warning("Invalid timezone. Using Asia/Jakarta.");
         }
-
-        return true;
     }
 
     private boolean setupDatabase() {
@@ -277,7 +278,9 @@ public final class VortexDaily extends JavaPlugin
         LocalDate today = getToday();
 
         Progress progress = new Progress();
+
         long streak = data.streak;
+        progress.previousStreak = data.streak;
 
         if (!data.lastClaim.isEmpty()) {
             try {
@@ -323,7 +326,10 @@ public final class VortexDaily extends JavaPlugin
         }
 
         if (progress.streakReset) {
-            sendStreakResetWebhook(player, progress.streak);
+            sendStreakResetWebhook(
+                    player,
+                    progress.previousStreak
+            );
         }
 
         long newStreak = progress.streak + 1;
@@ -396,9 +402,12 @@ public final class VortexDaily extends JavaPlugin
                 player,
                 day,
                 newStreak,
-                dailyCommands,
-                weeklyCommands,
-                weeklyClaimed
+                dailySection,
+                weeklyEnabled && weeklyClaimed
+                        ? getConfig().getConfigurationSection(
+                                "weekly-rewards." + day
+                        )
+                        : null
         );
 
         String message = getConfig().getString(
@@ -443,6 +452,7 @@ public final class VortexDaily extends JavaPlugin
                         Bukkit.getConsoleSender(),
                         command
                 );
+
             } catch (Exception e) {
                 getLogger().warning(
                         "Failed to execute reward command: " + command
@@ -639,16 +649,16 @@ public final class VortexDaily extends JavaPlugin
         }
     }
 
-    // --------------------------------------------------
+    // ==================================================
     // DISCORD WEBHOOK
-    // --------------------------------------------------
+    // ==================================================
 
     private boolean webhookEnabled(String event) {
-        return getConfig().getBoolean("discord-webhook.enabled", false)
-                && getConfig().getBoolean(
-                        "discord-webhook.events." + event,
-                        true
-                );
+        return getConfig().getBoolean(
+                "discord-webhook.enabled", false
+        ) && getConfig().getBoolean(
+                "discord-webhook.events." + event, true
+        );
     }
 
     private String escapeJson(String input) {
@@ -665,9 +675,12 @@ public final class VortexDaily extends JavaPlugin
                 case '\n' -> result.append("\\n");
                 case '\r' -> result.append("\\r");
                 case '\t' -> result.append("\\t");
+
                 default -> {
                     if (c < 32) {
-                        result.append(String.format("\\u%04x", (int) c));
+                        result.append(
+                                String.format("\\u%04x", (int) c)
+                        );
                     } else {
                         result.append(c);
                     }
@@ -678,25 +691,56 @@ public final class VortexDaily extends JavaPlugin
         return result.toString();
     }
 
-    private String commandDisplay(List<String> commands) {
-        if (commands == null || commands.isEmpty()) {
-            return "`No commands configured`";
+    private String replacePlaceholders(
+            String text,
+            Player player,
+            int day,
+            long streak
+    ) {
+        return text
+                .replace("%player%", player.getName())
+                .replace("%uuid%", player.getUniqueId().toString())
+                .replace("%day%", String.valueOf(day))
+                .replace("%streak%", String.valueOf(streak));
+    }
+
+    private String formatDisplay(
+            ConfigurationSection section,
+            Player player,
+            int day,
+            long streak
+    ) {
+        if (section == null) {
+            return "• No reward details configured";
         }
 
-        StringBuilder result = new StringBuilder("```yaml\n");
+        List<String> display = section.getStringList("display");
 
-        for (String command : commands) {
-            String line = command.replace("```", "'''");
+        if (display.isEmpty()) {
+            return "• No reward details configured";
+        }
 
-            if (result.length() + line.length() + 2 > 950) {
-                result.append("...more commands");
+        StringBuilder result = new StringBuilder();
+
+        for (String reward : display) {
+            String line = replacePlaceholders(
+                    reward,
+                    player,
+                    day,
+                    streak
+            );
+
+            if (result.length() + line.length() + 4 > 950) {
+                result.append("\n• More rewards...");
                 break;
             }
 
-            result.append("- ").append(line).append("\n");
-        }
+            if (!result.isEmpty()) {
+                result.append("\n");
+            }
 
-        result.append("```");
+            result.append("• ").append(line);
+        }
 
         return result.toString();
     }
@@ -735,6 +779,7 @@ public final class VortexDaily extends JavaPlugin
 
         if (!(url.startsWith("https://discord.com/api/webhooks/")
                 || url.startsWith("https://discordapp.com/api/webhooks/"))) {
+
             getLogger().warning(
                     "Invalid Discord webhook URL. Check config.yml."
             );
@@ -820,6 +865,7 @@ public final class VortexDaily extends JavaPlugin
             ).thenAccept(response -> {
                 if (response.statusCode() < 200
                         || response.statusCode() >= 300) {
+
                     getLogger().warning(
                             "Discord webhook returned HTTP "
                                     + response.statusCode()
@@ -839,29 +885,17 @@ public final class VortexDaily extends JavaPlugin
         }
     }
 
-    private void sendClaimWebhook(
+    private List<String> createPlayerFields(
             Player player,
             int day,
-            long streak,
-            List<String> dailyCommands,
-            List<String> weeklyCommands,
-            boolean weeklyClaimed
+            long streak
     ) {
-        boolean dailyEnabled = webhookEnabled("daily-claim");
-        boolean weeklyEnabled = weeklyClaimed
-                && webhookEnabled("weekly-bonus");
-
-        if (!dailyEnabled && !weeklyEnabled) {
-            return;
-        }
-
         List<String> fields = new ArrayList<>();
 
         fields.add(discordField(
                 "👤 Player",
-                "**" + player.getName() + "**\n`"
-                        + player.getUniqueId() + "`",
-                false
+                "**" + player.getName() + "**",
+                true
         ));
 
         fields.add(discordField(
@@ -877,39 +911,72 @@ public final class VortexDaily extends JavaPlugin
         ));
 
         fields.add(discordField(
-                "🎁 Daily Rewards",
-                commandDisplay(dailyCommands),
+                "🆔 Player UUID",
+                "`" + player.getUniqueId() + "`",
                 false
         ));
 
-        if (weeklyClaimed && weeklyEnabled) {
-            fields.add(discordField(
-                    "🏆 Weekly Bonus",
-                    commandDisplay(weeklyCommands),
-                    false
-            ));
-        }
+        return fields;
+    }
 
-        String title = weeklyClaimed && weeklyEnabled
-                ? "🏆 Weekly Bonus Claimed!"
-                : "🎁 Daily Reward Claimed!";
-
-        String description = weeklyClaimed && weeklyEnabled
-                ? "A player has successfully claimed their daily reward and weekly bonus!"
-                : "A player has successfully claimed their daily reward.";
-
-        int color = getConfig().getInt(
-                "discord-webhook.embed.color",
-                5793266
+    private void sendClaimWebhook(
+            Player player,
+            int day,
+            long streak,
+            ConfigurationSection dailySection,
+            ConfigurationSection weeklySection
+    ) {
+        List<String> dailyFields = createPlayerFields(
+                player,
+                day,
+                streak
         );
+
+        dailyFields.add(discordField(
+                "🎁 Received Rewards",
+                formatDisplay(
+                        dailySection,
+                        player,
+                        day,
+                        streak
+                ),
+                false
+        ));
 
         sendWebhook(
                 "daily-claim",
-                title,
-                description,
-                color,
-                fields
+                "🎁 Daily Reward Claimed!",
+                "A player has successfully claimed their daily rewards.",
+                5793266,
+                dailyFields
         );
+
+        if (weeklySection != null) {
+            List<String> weeklyFields = createPlayerFields(
+                    player,
+                    day,
+                    streak
+            );
+
+            weeklyFields.add(discordField(
+                    "🏆 Weekly Bonus Rewards",
+                    formatDisplay(
+                            weeklySection,
+                            player,
+                            day,
+                            streak
+                    ),
+                    false
+            ));
+
+            sendWebhook(
+                    "weekly-bonus",
+                    "🏆 Weekly Bonus Claimed!",
+                    "Congratulations! A player has completed another 7-day streak.",
+                    16766720,
+                    weeklyFields
+            );
+        }
     }
 
     private void sendStreakResetWebhook(
@@ -945,9 +1012,9 @@ public final class VortexDaily extends JavaPlugin
         );
     }
 
-    // --------------------------------------------------
+    // ==================================================
     // COMMANDS
-    // --------------------------------------------------
+    // ==================================================
 
     @Override
     public boolean onCommand(
@@ -1027,7 +1094,8 @@ public final class VortexDaily extends JavaPlugin
                     sender.sendMessage(
                             prefix() + color(
                                     getConfig().getString(
-                                            "messages.no-permission"
+                                            "messages.no-permission",
+                                            "&cKamu tidak memiliki permission!"
                                     )
                             )
                     );
@@ -1039,7 +1107,10 @@ public final class VortexDaily extends JavaPlugin
 
                 sender.sendMessage(
                         prefix() + color(
-                                getConfig().getString("messages.reload")
+                                getConfig().getString(
+                                        "messages.reload",
+                                        "&aConfig berhasil dimuat ulang!"
+                                )
                         )
                 );
             }
@@ -1049,7 +1120,8 @@ public final class VortexDaily extends JavaPlugin
                     sender.sendMessage(
                             prefix() + color(
                                     getConfig().getString(
-                                            "messages.no-permission"
+                                            "messages.no-permission",
+                                            "&cKamu tidak memiliki permission!"
                                     )
                             )
                     );

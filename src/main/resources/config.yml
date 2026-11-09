@@ -1,0 +1,205 @@
+
+settings:
+  prefix: "&8[&bVortexDaily&8] "
+  timezone: "Asia/Jakarta"
+  reset-hour: 0
+  streak-enabled: true
+  streak-reset: true
+  gui-title: "&8Daily Rewards"
+  auto-open: false
+
+messages:
+  no-permission: "&cKamu tidak memiliki permission!"
+  already-claimed: "&cKamu sudah mengambil hadiah hari ini!"
+  claimed: "&aBerhasil mengambil hadiah Day %day%!"
+  streak-reset: "&cStreak kamu terputus! Dimulai kembali dari Day 1."
+  streak-info: "&bStreak kamu: &f%streak% hari"
+  reload: "&aConfig VortexDaily berhasil dimuat ulang!"
+  player-not-found: "&cPemain tidak ditemukan."
+  reset: "&aData Daily %player% berhasil direset."
+
+gui:
+  rows: 6
+  filler:
+    enabled: true
+    material: BLACK_STAINED_GLASS_PANE
+    name: " "
+  claim:
+    slot: 49
+    material: CHEST
+    name: "&a&lCLAIM REWARD"
+    lore:
+      - "&7Klik untuk mengambil hadiah."
+      - ""
+      - "&eHari berikutnya: &fDay %day%"
+      - "&eStreak: &f%streak% hari"
+  streak:
+    slot: 4
+    material: FIREWORK_STAR
+    name: "&6&lYOUR STREAK"
+    lore:
+      - "&7Streak saat ini: &f%streak% hari"
+      - "&7Berikutnya: &eDay %day%"
+  claimed:
+    material: LIME_STAINED_GLASS_PANE
+    name: "&a&lDAY %day% &8- &aCLAIMED"
+    lore:
+      - "&7Hadiah sudah diambil."
+  available:
+    material: CHEST
+    name: "&e&lDAY %day% &8- &eAVAILABLE"
+    lore:
+      - "&7Hadiah tersedia."
+      - "&eKlik CLAIM untuk mengambil."
+  locked:
+    material: GRAY_STAINED_GLASS_PANE
+    name: "&c&lDAY %day% &8- &cLOCKED"
+    lore:
+      - "&7Selesaikan hari sebelumnya."
+  weekly:
+    material: ENDER_CHEST
+    name: "&6&lWEEKLY BONUS"
+    lore:
+      - "&7Bonus setiap 7 hari berturut-turut."
+      - "&eDay %day%"
+
+daily-rewards:
+  "1":
+    rewards:
+      - "money:1000"
+      - "item:DIAMOND:2"
+  "2":
+    rewards:
+      - "money:2000"
+      - "item:IRON_INGOT:16"
+  "3":
+    rewards:
+      - "money:3000"
+      - "item:DIAMOND:3"
+  "4":
+    rewards:
+      - "money:4000"
+      - "item:GOLD_INGOT:16"
+  "5":
+    rewards:
+      - "money:5000"
+      - "item:EMERALD:5"
+  "6":
+    rewards:
+      - "money:6000"
+      - "item:EXPERIENCE_BOTTLE:16"
+  "7":
+    rewards:
+      - "money:7000"
+      - "item:DIAMOND:5"
+  "8":
+    rewards:
+      - "money:8000"
+      - "item:IRON_BLOCK:5"
+  "9":
+    rewards:
+      - "money:9000"
+      - "item:EMERALD:8"
+  "10":
+    rewards:
+      - "money:10000"
+      - "item:DIAMOND:8"
+  "11":
+    rewards:
+      - "money:11000"
+      - "item:GOLD_BLOCK:5"
+  "12":
+    rewards:
+      - "money:12000"
+      - "item:EXPERIENCE_BOTTLE:32"
+  "13":
+    rewards:
+      - "money:13000"
+      - "item:DIAMOND:10"
+  "14":
+    rewards:
+      - "money:14000"
+      - "item:EMERALD_BLOCK:3"
+  "15":
+    rewards:
+      - "money:15000"
+      - "item:DIAMOND_BLOCK:1"
+  "16":
+    rewards:
+      - "money:16000"
+      - "item:IRON_BLOCK:16"
+  "17":
+    rewards:
+      - "money:17000"
+      - "item:DIAMOND:16"
+  "18":
+    rewards:
+      - "money:18000"
+      - "item:GOLD_BLOCK:10"
+  "19":
+    rewards:
+      - "money:19000"
+      - "item:EMERALD_BLOCK:5"
+  "20":
+    rewards:
+      - "money:20000"
+      - "item:DIAMOND_BLOCK:2"
+  "21":
+    rewards:
+      - "money:21000"
+      - "item:NETHERITE_INGOT:1"
+  "22":
+    rewards:
+      - "money:22000"
+      - "item:DIAMOND:24"
+  "23":
+    rewards:
+      - "money:23000"
+      - "item:EMERALD_BLOCK:8"
+  "24":
+    rewards:
+      - "money:24000"
+      - "item:GOLD_BLOCK:16"
+  "25":
+    rewards:
+      - "money:25000"
+      - "item:DIAMOND_BLOCK:3"
+  "26":
+    rewards:
+      - "money:26000"
+      - "item:NETHERITE_SCRAP:8"
+  "27":
+    rewards:
+      - "money:27000"
+      - "item:NETHERITE_INGOT:2"
+  "28":
+    rewards:
+      - "money:28000"
+      - "item:DIAMOND_BLOCK:5"
+  "29":
+    rewards:
+      - "money:29000"
+      - "item:NETHERITE_INGOT:3"
+  "30":
+    rewards:
+      - "money:50000"
+      - "item:NETHERITE_BLOCK:1"
+
+weekly-rewards:
+  "7":
+    rewards:
+      - "money:25000"
+      - "item:DIAMOND:16"
+      - "command:give %player% golden_apple 8"
+  "14":
+    rewards:
+      - "money:50000"
+      - "item:DIAMOND_BLOCK:3"
+  "21":
+    rewards:
+      - "money:75000"
+      - "item:NETHERITE_INGOT:5"
+  "28":
+    rewards:
+      - "money:100000"
+      - "item:NETHERITE_BLOCK:2"

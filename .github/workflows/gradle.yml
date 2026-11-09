@@ -1,0 +1,55 @@
+
+name: Build VortexDaily
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Plugin
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+
+      - name: Build VortexDaily
+        run: gradle clean build --no-daemon
+
+      - name: Verify Build
+        run: |
+          echo "Checking VortexDaily build..."
+          ls -lah build/libs/
+          test -f build/libs/VortexDaily-1.1.0.jar
+          echo "VortexDaily build successful!"
+
+      - name: Upload VortexDaily Plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: VortexDaily-1.1.0
+          path: build/libs/VortexDaily-1.1.0.jar
+          if-no-files-found: error
+          retention-days: 30
